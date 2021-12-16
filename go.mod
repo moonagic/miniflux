@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/felixge/httpsnoop v1.0.1 // indirect
+	github.com/go-shiori/go-readability v0.0.0-20210627123243-82cc33435520
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
 	github.com/golang/gddo v0.0.0-20200831202555-721e228c7686 // indirect
 	github.com/gorilla/mux v1.8.0

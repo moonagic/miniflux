@@ -5,10 +5,13 @@
 package scraper // import "miniflux.app/reader/scraper"
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"miniflux.app/config"
 	"miniflux.app/http/client"
@@ -16,7 +19,10 @@ import (
 	"miniflux.app/reader/readability"
 	"miniflux.app/url"
 
+	gurl "net/url"
+
 	"github.com/PuerkitoBio/goquery"
+	ra "github.com/go-shiori/go-readability"
 )
 
 // Fetch downloads a web page and returns relevant contents.
@@ -54,7 +60,10 @@ func Fetch(websiteURL, rules, userAgent string, cookie string, allowSelfSignedCe
 	}
 
 	var content string
-	if rules != "" {
+	if rules == "ra" {
+		logger.Debug(`[Scraper] Using rules %q for %q`, rules, websiteURL)
+		content, err = readabilityContent(websiteURL)
+	} else if rules != "" {
 		logger.Debug(`[Scraper] Using rules %q for %q`, rules, websiteURL)
 		content, err = scrapContent(response.Body, rules)
 	} else {
@@ -84,6 +93,29 @@ func scrapContent(page io.Reader, rules string) (string, error) {
 	})
 
 	return contents, nil
+}
+
+func readabilityContent(website string) (string, error) {
+	parsedURL, err := gurl.ParseRequestURI(website)
+	if err != nil {
+		return "", fmt.Errorf("scraper: invalid url")
+	}
+	// Fetch page from URL
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	resp, err := httpClient.Get(website)
+	if err != nil {
+		return "", fmt.Errorf("scraper: invalid url")
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+	parser := ra.NewParser()
+	article, err := parser.Parse(resp.Body, parsedURL)
+	if err != nil {
+		return "", fmt.Errorf("scraper: invalid url")
+	}
+	return article.Content, nil
 }
 
 func getPredefinedScraperRules(websiteURL string) string {
