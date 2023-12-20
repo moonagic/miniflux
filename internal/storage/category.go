@@ -126,10 +126,10 @@ func (s *Storage) CategoriesWithFeedCount(userID int64) (model.Categories, error
 			(SELECT count(*)
 			   FROM feeds
 			     JOIN entries ON (feeds.id = entries.feed_id)
-			   WHERE feeds.category_id = c.id AND entries.status = 'unread') AS count_unread
+			   WHERE feeds.category_id = c.id AND entries.status = $1) AS count_unread
 		FROM categories c
 		WHERE
-			user_id=$1
+			user_id=$2
 	`
 
 	if user.CategoriesSortingOrder == "alphabetical" {
@@ -145,7 +145,7 @@ func (s *Storage) CategoriesWithFeedCount(userID int64) (model.Categories, error
 		`
 	}
 
-	rows, err := s.db.Query(query, userID)
+	rows, err := s.db.Query(query, model.EntryStatusUnread, userID)
 	if err != nil {
 		return nil, fmt.Errorf(`store: unable to fetch categories: %v`, err)
 	}
@@ -238,7 +238,7 @@ func (s *Storage) RemoveCategory(userID, categoryID int64) error {
 func (s *Storage) RemoveAndReplaceCategoriesByName(userid int64, titles []string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return errors.New("unable to begin transaction")
+		return errors.New("store: unable to begin transaction")
 	}
 
 	titleParam := pq.Array(titles)
@@ -247,11 +247,11 @@ func (s *Storage) RemoveAndReplaceCategoriesByName(userid int64, titles []string
 	err = tx.QueryRow(query, userid, titleParam).Scan(&count)
 	if err != nil {
 		tx.Rollback()
-		return errors.New("unable to retrieve category count")
+		return errors.New("store: unable to retrieve category count")
 	}
 	if count < 1 {
 		tx.Rollback()
-		return errors.New("at least 1 category must remain after deletion")
+		return errors.New("store: at least 1 category must remain after deletion")
 	}
 
 	query = `
@@ -268,14 +268,14 @@ func (s *Storage) RemoveAndReplaceCategoriesByName(userid int64, titles []string
 	_, err = tx.Exec(query, userid, titleParam)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("unable to replace categories: %v", err)
+		return fmt.Errorf("store: unable to replace categories: %v", err)
 	}
 
 	query = "DELETE FROM categories WHERE user_id = $1 AND title = ANY($2)"
 	_, err = tx.Exec(query, userid, titleParam)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("unable to delete categories: %v", err)
+		return fmt.Errorf("store: unable to delete categories: %v", err)
 	}
 	tx.Commit()
 	return nil
